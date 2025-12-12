@@ -1,13 +1,17 @@
 pipeline {
-  agent any
-  stages {
-    stage('Checkout') {
-      steps {
-        checkout scm
-      }
+    agent { label 'built-in' }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                echo "Branch: ${env.BRANCH_NAME}"
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh 'mvn clean install'
+            }
+        }
     }
-  }
-  post {
-    always { echo "Finished pipeline for ${env.BRANCH_NAME}" }
-  }
 }
