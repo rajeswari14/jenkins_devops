@@ -12,14 +12,12 @@
     <packaging>jar</packaging>
 
     <dependencies>
-        <!-- Calculator Engine dependency -->
         <dependency>
             <groupId>org.example</groupId>
             <artifactId>maven-calculator-engine</artifactId>
             <version>1.0-SNAPSHOT</version>
         </dependency>
 
-        <!-- JUnit (optional) -->
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
@@ -30,7 +28,6 @@
 
     <build>
         <plugins>
-            <!-- Compiler plugin -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -41,7 +38,7 @@
                 </configuration>
             </plugin>
 
-            <!-- JAR plugin to make executable JAR -->
+            <!-- Add this plugin to make the JAR executable -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
@@ -49,7 +46,7 @@
                 <configuration>
                     <archive>
                         <manifest>
-                            <mainClass>com.app.calculator.MainCalculator</mainClass>
+                            <mainClass>org.example.MainClass</mainClass>
                         </manifest>
                     </archive>
                 </configuration>
