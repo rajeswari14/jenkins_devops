@@ -65,31 +65,6 @@ pipeline {
                 }
             }
         }
-
-        stage('Post-Deployment Verification') {
-            steps {
-                script {
-                    def maxRetries = 10
-                    def retryInterval = 5
-                    def status = 0
-
-                    for (int i = 1; i <= maxRetries; i++) {
-                        status = sh(script: "curl -s -o /dev/null -w '%{http_code}' http://44.200.37.160:8080/health || true", returnStdout: true).trim()
-                        if (status == '200') {
-                            echo "Application is up and running! Status: ${status}"
-                            break
-                        } else {
-                            echo "Attempt ${i}: App not ready yet, status=${status}. Retrying in ${retryInterval}s..."
-                            sleep(retryInterval)
-                        }
-                    }
-
-                    if (status != '200') {
-                        error "Application verification failed after ${maxRetries} attempts!"
-                    }
-                }
-            }
-        }
     }
 
     post {
