@@ -32,22 +32,21 @@ pipeline {
         }
 
         stage('Security Scan') {
-            steps {
-                echo 'Running Trivy security scan on project...'
-                sh '''
-                # Run Trivy filesystem scan
-                trivy fs --severity HIGH,CRITICAL --exit-code 1 --format json -o trivy-report.json .
-                '''
-            }
-            post {
-                failure {
-                    echo 'Trivy detected vulnerabilities! Build failed.'
-                }
-                success {
-                    echo 'No critical vulnerabilities found.'
-                }
-            }
+    steps {
+        echo 'Running Trivy security scan...'
+        sh '''
+        trivy fs --severity HIGH,CRITICAL --exit-code 1 --format json -o trivy-report.json .
+        '''
+    }
+    post {
+        failure {
+            echo 'Trivy detected vulnerabilities! Build failed.'
         }
+        success {
+            echo 'No critical vulnerabilities found.'
+        }
+    }
+}
 
     }
 
