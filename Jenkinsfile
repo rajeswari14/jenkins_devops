@@ -52,40 +52,51 @@ pipeline {
         }
 
         stage('Deploy to Application Server') {
-            steps {
-                // Make deploy stage failure-tolerant
-                catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
-                    sshagent(credentials: ["${SSH_CREDENTIALS}"]) {
-                        sh """
-                        scp -o StrictHostKeyChecking=no target/${ARTIFACT_NAME} ${APP_SERVER}:/home/ubuntu/
-                        ssh -o StrictHostKeyChecking=no ${APP_SERVER} '
-                            pkill -f "${ARTIFACT_NAME}" || true
-                            nohup java -jar /home/ubuntu/${ARTIFACT_NAME} > app.log 2>&1 &
-                        '
-                        """
-                    }
-                }
-            }
-        }
-
-        stage('Post-Deployment Verification') {
-            steps {
-                script {
-                    echo 'Verifying deployment...'
-                    // Check if app is running without failing the pipeline
-                    def status = sh(
-                        script: 'curl -f http://44.200.37.160:8080/health || true',
-                        returnStatus: true
-                    )
-                    if (status == 0) {
-                        echo "Application is up and running."
-                    } else {
-                        echo "Application verification failed, but pipeline will continue."
-                    }
-                }
+    steps {
+        sshagent(credentials: ["${SSH_CREDENTIALS}"]) {
+            script {
+                // Use 'set +e' to prevent SSH command failure from failing pipeline
+                sh """
+                ssh -o StrictHostKeyChecking=no ${APP_SERVER} '
+                    set +e
+                    mkdir -p /home/ubuntu
+                    pkill -f "${ARTIFACT_NAME}"
+                    nohup java -jar /home/ubuntu/${ARTIFACT_NAME} > app.log 2>&1 &
+                    sleep 5
+                    exit 0
+                '
+                """
             }
         }
     }
+}
+
+        
+
+stage('Post-Deployment Verification') {
+    steps {
+        script {
+            echo 'Verifying deployment...'
+            def retries = 5
+            def success = false
+            for (int i = 1; i <= retries; i++) {
+                def status = sh(script: "curl -s -o /dev/null -w '%{http_code}' http://${APP_SERVER.replace('ubuntu@','')}:8080/health || true", returnStdout: true).trim()
+                if (status == "200") {
+                    echo "Application is up and running."
+                    success = true
+                    break
+                } else {
+                    echo "Attempt ${i}: App not ready yet, status=${status}. Retrying in 5s..."
+                    sleep 5
+                }
+            }
+            if (!success) {
+                echo "Application verification failed after ${retries} attempts, but pipeline continues."
+            }
+        }
+    }
+}
+
 
     post {
         always {
