@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         GIT_CREDENTIALS = 'github-token'
-        SSH_CREDENTIALS = 'ubuntu'
+        SSH_CREDENTIALS = 'jenkins-private'
         APP_SERVER = 'ubuntu@44.200.37.160'
         ARTIFACT_NAME = 'maven-calculator-1.0-SNAPSHOT.jar'
     }
