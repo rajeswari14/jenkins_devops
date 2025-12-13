@@ -2,16 +2,36 @@ pipeline {
     agent { label 'built-in' }
 
     stages {
+
         stage('Checkout') {
             steps {
-                echo "Branch: ${env.BRANCH_NAME}"
+                checkout scm
+                echo "Building branch: ${env.BRANCH_NAME}"
             }
         }
 
-        stage('Build') {
-            steps {
-                sh 'mvn clean install'
-            }
+
+        stage('Build (Develop only)') {
+
+               steps {
+        sh '''
+            echo "==== WORKSPACE ROOT ===="
+            pwd
+            ls -la
+
+            echo "==== FIND DIRECTORIES ===="
+            find . -maxdepth 3 -type d
+        '''
+               }
+    }
+}
+    
+    post {
+        success {
+            echo "Build completed successfully for develop branch"
+        }
+        failure {
+            echo "Build failed for develop branch"
         }
     }
 }
