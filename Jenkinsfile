@@ -1,15 +1,13 @@
 pipeline {
     agent any
-
-    environment {
-        GIT_CREDENTIALS = 'github-token'
-        SSH_CREDENTIALS = 'jenkins-private'
-        APP_SERVER = 'ubuntu@44.200.37.160'
-        ARTIFACT_NAME = 'maven-calculator-1.0-SNAPSHOT.jar'
-        DEPLOY_PATH = '/home/ubuntu'
+    options {
+        timestamps()
+        ansiColor('xterm')
+        retry(1)
     }
 
     stages {
+
         stage('Checkout SCM') {
             steps {
                 checkout scm
@@ -19,27 +17,26 @@ pipeline {
 
         stage('Build') {
             steps {
-                echo "Building the project..."
+                echo 'Building the project...'
                 sh 'mvn clean install'
             }
         }
 
         stage('Test') {
             steps {
-                echo "Running tests..."
+                echo 'Running tests...'
                 sh 'mvn test'
             }
         }
 
         stage('Security Scan') {
             steps {
+                echo 'Running Trivy security scan...'
                 script {
-                    echo "Running Trivy security scan..."
-                    def trivyExitCode = sh(
-                        script: 'trivy fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json -o trivy-report.json . || true',
-                        returnStatus: true
-                    )
-                    echo "Trivy scan finished with exit code: ${trivyExitCode}"
+                    sh '''
+                    trivy fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json -o trivy-report.json .
+                    '''
+                    echo 'Trivy scan finished'
                 }
             }
         }
@@ -48,65 +45,50 @@ pipeline {
             steps {
                 echo 'Packaging Maven project...'
                 sh 'mvn package'
-                sh "ls -la target"
-                archiveArtifacts artifacts: "target/${ARTIFACT_NAME}", allowEmptyArchive: true
+                sh 'ls -la target'
+                archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
             }
         }
 
         stage('Deploy to Application Server') {
-    steps {
-        sshagent(credentials: ["${SSH_CREDENTIALS}"]) {
-            script {
-                echo "Copying artifact to server..."
-                sh """
-                scp -o StrictHostKeyChecking=no ${env.WORKSPACE}/target/${ARTIFACT_NAME} ${APP_SERVER}:${DEPLOY_PATH}/
-                """
-
-                echo "Stopping old application (if any) and starting new one..."
-                sh """
-                ssh -o StrictHostKeyChecking=no ${APP_SERVER} << 'ENDSSH'
-                    set -e
-                    if pgrep -f "${ARTIFACT_NAME}" > /dev/null; then
-                        pkill -f "${ARTIFACT_NAME}"
-                        echo "Old application stopped."
-                    fi
-                    nohup java -jar ${DEPLOY_PATH}/${ARTIFACT_NAME} > ${DEPLOY_PATH}/app.log 2>&1 &
-                    echo "New application started."
-ENDSSH
-                """
-            }
-        }
-    }
-}
-
-        stage('Post-Deployment Verification') {
-    steps {
-        script {
-            echo 'Verifying deployment...'
-            def retries = 10
-            def success = false
-            def url = "http://${APP_SERVER.replace('ubuntu@','')}:8080/health"
-            for (int i = 1; i <= retries; i++) {
-                def status = sh(
-                    script: "curl -s -o /dev/null -w '%{http_code}' ${url} || true",
-                    returnStdout: true
-                ).trim()
-                if (status == "200") {
-                    echo "Application is up. Status=${status}"
-                    success = true
-                    break
-                } else {
-                    echo "Attempt ${i}: App not ready yet, status=${status}. Retrying in 5s..."
-                    sleep 5
+            steps {
+                sshagent(['ubuntu']) {
+                    script {
+                        echo 'Copying artifact to server...'
+                        sh '''
+                        scp -o StrictHostKeyChecking=no target/maven-calculator-1.0-SNAPSHOT.jar ubuntu@44.200.37.160:/home/ubuntu/
+                        '''
+                        
+                        echo 'Stopping old application (if any) and starting new one...'
+                        sh '''
+                        ssh -o StrictHostKeyChecking=no ubuntu@44.200.37.160 "
+                        pkill -f 'maven-calculator-1.0-SNAPSHOT.jar' || echo 'No old app running';
+                        nohup java -jar /home/ubuntu/maven-calculator-1.0-SNAPSHOT.jar > /home/ubuntu/app.log 2>&1 &
+                        "
+                        '''
+                    }
                 }
             }
-            if (!success) {
-                error "Application verification failed after ${retries} attempts!"
+        }
+
+        stage('Post-Deployment Verification') {
+            steps {
+                script {
+                    echo 'Verifying deployment...'
+                    retry(12) {
+                        def status = sh(script: "curl -s -o /dev/null -w %{http_code} http://44.200.37.160:8080/health || echo 000", returnStdout: true).trim()
+                        echo "App status: ${status}"
+                        if (status != '200') {
+                            echo "App not ready yet, retrying in 5s..."
+                            sleep 5
+                            error "Deployment not ready"
+                        } else {
+                            echo "Application is up and running!"
+                        }
+                    }
+                }
             }
         }
-    }
-}
-
     }
 
     post {
@@ -114,10 +96,10 @@ ENDSSH
             echo 'Pipeline finished'
         }
         success {
-            echo 'Build SUCCESS for branch: ' + env.BRANCH_NAME
+            echo 'Build SUCCESS for branch: ${env.BRANCH_NAME}'
         }
         failure {
-            echo 'Build FAILED for branch: ' + env.BRANCH_NAME
+            echo 'Build FAILED for branch: ${env.BRANCH_NAME}'
         }
     }
 }
