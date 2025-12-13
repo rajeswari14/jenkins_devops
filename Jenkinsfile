@@ -1,10 +1,6 @@
 pipeline {
     agent any
 
-    environment {
-        // optional env vars
-    }
-
     stages {
         stage('Checkout SCM') {
             steps {
@@ -30,7 +26,7 @@ pipeline {
                 sh 'trivy fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json -o trivy-report.json .'
             }
         }
-    } // end stages
+    }
 
     post {
         success {
@@ -40,4 +36,4 @@ pipeline {
             echo "Build FAILED for ${env.BRANCH_NAME}"
         }
     }
-} // end pipeline
+}
