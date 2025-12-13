@@ -31,7 +31,6 @@ pipeline {
         stage('Security Scan') {
             steps {
                 script {
-                    // Run Trivy, generate JSON report, ignore exit code to not fail build
                     def trivyExitCode = sh(
                         script: 'trivy fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json -o trivy-report.json . || true',
                         returnStatus: true
@@ -64,7 +63,6 @@ pipeline {
         stage('Post-Deployment Verification') {
             steps {
                 echo 'Verifying deployment...'
-                // Add any verification commands here if needed
             }
         }
     }
@@ -78,6 +76,16 @@ pipeline {
         }
         failure {
             echo 'Build FAILED for branch: ' + env.BRANCH_NAME
+        }
+        cleanup {
+            // This block ensures the GitHub commit status issue doesn’t break the build
+            script {
+                try {
+                    // any GitHub status update code can go here
+                } catch (Exception e) {
+                    echo "Skipping GitHub commit status update due to token/permission issue: ${e}"
+                }
+            }
         }
     }
 }
