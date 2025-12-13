@@ -17,12 +17,7 @@ pipeline {
                     pwd
                     ls -la
 
-                    echo "==== Building calculator-engine ===="
-                    cd calculator-engine
-                    mvn clean install
-
-                    echo "==== Building main calculator module ===="
-                    cd ../main1
+                    echo "==== Running Maven build from root ===="
                     mvn clean install
                 '''
             }
