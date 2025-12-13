@@ -45,27 +45,26 @@ pipeline {
         }
 
         stage('Deploy to Application Server') {
-    steps {
-        sshagent(['ubuntu']) {
-            echo "Deploying artifact to server..."
-            
-            // Copy artifact
-            sh 'scp -o StrictHostKeyChecking=no target/maven-calculator-1.0-SNAPSHOT.jar ubuntu@44.200.37.160:/home/ubuntu/'
-            
-            echo "Stopping old application and starting new one..."
-            
-            // Run commands directly via SSH (no heredoc)
-            sh """
-                ssh -o StrictHostKeyChecking=no ubuntu@44.200.37.160 '
-                cd /home/ubuntu
-                pkill -f maven-calculator || true
-                nohup java -jar maven-calculator-1.0-SNAPSHOT.jar > app.log 2>&1 &
-                '
-            """
-        }
-    }
-}
+            steps {
+                sshagent(['ubuntu']) {
+                    echo "Deploying artifact to server..."
 
+                    // Copy artifact
+                    sh 'scp -o StrictHostKeyChecking=no target/maven-calculator-1.0-SNAPSHOT.jar ubuntu@44.200.37.160:/home/ubuntu/'
+
+                    echo "Stopping old application and starting new one..."
+
+                    // Run commands safely via SSH
+                    sh """
+                    ssh -o StrictHostKeyChecking=no ubuntu@44.200.37.160 "
+                        cd /home/ubuntu;
+                        pkill -f maven-calculator || true;
+                        nohup java -jar maven-calculator-1.0-SNAPSHOT.jar > app.log 2>&1 &
+                    "
+                    """
+                }
+            }
+        }
 
         stage('Post-Deployment Verification') {
             steps {
