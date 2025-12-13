@@ -2,16 +2,32 @@ pipeline {
     agent { label 'built-in' }
 
     stages {
+
         stage('Checkout') {
             steps {
-                echo "Branch: ${env.BRANCH_NAME}"
+                checkout scm
+                echo "Building branch: ${env.BRANCH_NAME}"
             }
         }
 
-        stage('Build') {
+        stage('Build (Develop only)') {
+
             steps {
+                echo "Building calculator-engine module..."
+                sh 'cd calculator-engine && mvn clean install'
+
+                echo "Building main calculator module..."
                 sh 'mvn clean install'
             }
+        }
+    }
+
+    post {
+        success {
+            echo "Build completed successfully for develop branch"
+        }
+        failure {
+            echo "Build failed for develop branch"
         }
     }
 }
