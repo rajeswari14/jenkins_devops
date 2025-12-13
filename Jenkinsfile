@@ -10,6 +10,7 @@ pipeline {
             }
         }
 
+
         stage('Build (Develop only)') {
 
             steps {
@@ -23,9 +24,10 @@ pipeline {
                 sh '''
                     cd main1
                     mvn clean install
+                '''
+            }
         }
     }
-
     post {
         success {
             echo "Build completed successfully for develop branch"
