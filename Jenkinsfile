@@ -54,56 +54,59 @@ pipeline {
         }
 
         stage('Deploy to Application Server') {
-            steps {
-                sshagent(credentials: ["${SSH_CREDENTIALS}"]) {
-                    script {
-                        def deployExit = sh(
-                            script: """
-                            ssh -o StrictHostKeyChecking=no ${APP_SERVER} << 'ENDSSH'
-                                set -e
-                                mkdir -p ${DEPLOY_PATH}
-                                cp /var/lib/jenkins/workspace/${env.JOB_NAME}/target/${ARTIFACT_NAME} ${DEPLOY_PATH}/
-                                if pgrep -f "${ARTIFACT_NAME}" > /dev/null; then
-                                    pkill -f "${ARTIFACT_NAME}"
-                                fi
-                                nohup java -jar ${DEPLOY_PATH}/${ARTIFACT_NAME} > ${DEPLOY_PATH}/app.log 2>&1 &
-                                echo "Deployment started"
+    steps {
+        sshagent(credentials: ["${SSH_CREDENTIALS}"]) {
+            script {
+                echo "Copying artifact to server..."
+                sh """
+                scp -o StrictHostKeyChecking=no ${env.WORKSPACE}/target/${ARTIFACT_NAME} ${APP_SERVER}:${DEPLOY_PATH}/
+                """
+
+                echo "Stopping old application (if any) and starting new one..."
+                sh """
+                ssh -o StrictHostKeyChecking=no ${APP_SERVER} << 'ENDSSH'
+                    set -e
+                    if pgrep -f "${ARTIFACT_NAME}" > /dev/null; then
+                        pkill -f "${ARTIFACT_NAME}"
+                        echo "Old application stopped."
+                    fi
+                    nohup java -jar ${DEPLOY_PATH}/${ARTIFACT_NAME} > ${DEPLOY_PATH}/app.log 2>&1 &
+                    echo "New application started."
 ENDSSH
-                            """,
-                            returnStatus: true
-                        )
-                        echo "Deployment exit code: ${deployExit}"
-                    }
-                }
+                """
             }
         }
+    }
+}
 
         stage('Post-Deployment Verification') {
-            steps {
-                script {
-                    echo 'Verifying deployment...'
-                    def maxRetries = 10
-                    def success = false
-                    for (int i = 1; i <= maxRetries; i++) {
-                        def status = sh(
-                            script: "curl -s -o /dev/null -w '%{http_code}' http://${APP_SERVER.replace('ubuntu@','')}:8080/health || true",
-                            returnStdout: true
-                        ).trim()
-                        if (status == "200") {
-                            echo "Application is up and running. Status=${status}"
-                            success = true
-                            break
-                        } else {
-                            echo "Attempt ${i}: App not ready yet, status=${status}. Retrying in 5s..."
-                            sleep 5
-                        }
-                    }
-                    if (!success) {
-                        error "Application verification failed after ${maxRetries} attempts!"
-                    }
+    steps {
+        script {
+            echo 'Verifying deployment...'
+            def retries = 10
+            def success = false
+            def url = "http://${APP_SERVER.replace('ubuntu@','')}:8080/health"
+            for (int i = 1; i <= retries; i++) {
+                def status = sh(
+                    script: "curl -s -o /dev/null -w '%{http_code}' ${url} || true",
+                    returnStdout: true
+                ).trim()
+                if (status == "200") {
+                    echo "Application is up. Status=${status}"
+                    success = true
+                    break
+                } else {
+                    echo "Attempt ${i}: App not ready yet, status=${status}. Retrying in 5s..."
+                    sleep 5
                 }
             }
+            if (!success) {
+                error "Application verification failed after ${retries} attempts!"
+            }
         }
+    }
+}
+
     }
 
     post {
