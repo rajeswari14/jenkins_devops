@@ -54,43 +54,43 @@ pipeline {
         }
 
         stage('Deploy to Application Server') {
-    steps {
-        sshagent(credentials: ["${SSH_CREDENTIALS}"]) {
-            script {
-                def deployExit = sh(
-                    script: """
-                    ssh -o StrictHostKeyChecking=no ${APP_SERVER} '
-                        set -e
-                        mkdir -p /home/ubuntu
-                        if pgrep -f "${ARTIFACT_NAME}" > /dev/null; then
-                            pkill -f "${ARTIFACT_NAME}"
-                        fi
-                        nohup java -jar /home/ubuntu/${ARTIFACT_NAME} > /home/ubuntu/app.log 2>&1 &
-                        echo "Deployment started"
-                    '
-                    """,
-                    returnStatus: true
-                )
-                echo "Deployment exit code: ${deployExit}"
+            steps {
+                sshagent(credentials: ["${SSH_CREDENTIALS}"]) {
+                    script {
+                        def deployExit = sh(
+                            script: """
+                            ssh -o StrictHostKeyChecking=no ${APP_SERVER} << 'ENDSSH'
+                                set -e
+                                mkdir -p ${DEPLOY_PATH}
+                                cp /var/lib/jenkins/workspace/${env.JOB_NAME}/target/${ARTIFACT_NAME} ${DEPLOY_PATH}/
+                                if pgrep -f "${ARTIFACT_NAME}" > /dev/null; then
+                                    pkill -f "${ARTIFACT_NAME}"
+                                fi
+                                nohup java -jar ${DEPLOY_PATH}/${ARTIFACT_NAME} > ${DEPLOY_PATH}/app.log 2>&1 &
+                                echo "Deployment started"
+ENDSSH
+                            """,
+                            returnStatus: true
+                        )
+                        echo "Deployment exit code: ${deployExit}"
+                    }
+                }
             }
         }
-    }
-}
-
 
         stage('Post-Deployment Verification') {
             steps {
                 script {
                     echo 'Verifying deployment...'
-                    def retries = 5
+                    def maxRetries = 10
                     def success = false
-                    for (int i = 1; i <= retries; i++) {
+                    for (int i = 1; i <= maxRetries; i++) {
                         def status = sh(
                             script: "curl -s -o /dev/null -w '%{http_code}' http://${APP_SERVER.replace('ubuntu@','')}:8080/health || true",
                             returnStdout: true
                         ).trim()
                         if (status == "200") {
-                            echo "Application is up and running."
+                            echo "Application is up and running. Status=${status}"
                             success = true
                             break
                         } else {
@@ -99,7 +99,7 @@ pipeline {
                         }
                     }
                     if (!success) {
-                        echo "Application verification failed after ${retries} attempts, but pipeline continues."
+                        error "Application verification failed after ${maxRetries} attempts!"
                     }
                 }
             }
