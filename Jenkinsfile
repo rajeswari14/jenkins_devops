@@ -14,11 +14,15 @@ pipeline {
 
             steps {
                 echo "Building calculator-engine module..."
-                sh 'cd calculator-engine && mvn clean install'
+                sh '''
+                    cd calculator-engine/maven-calculator-engine
+                    mvn clean install
+                '''
 
                 echo "Building main calculator module..."
-                sh 'mvn clean install'
-            }
+                sh '''
+                    cd main1
+                    mvn clean install
         }
     }
 
