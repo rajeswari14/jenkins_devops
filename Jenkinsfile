@@ -46,26 +46,22 @@ pipeline {
 
         stage('Deploy to Application Server') {
     steps {
-        sshagent(['ubuntu']) {  // Make sure 'ubuntu' is the SSH credential ID in Jenkins
+        sshagent(['ubuntu']) {
             echo "Deploying artifact to server..."
             
-            // Copy artifact to remote server
-            sh '''
-                scp -o StrictHostKeyChecking=no target/maven-calculator-1.0-SNAPSHOT.jar ubuntu@44.200.37.160:/home/ubuntu/
-            '''
+            // Copy artifact
+            sh 'scp -o StrictHostKeyChecking=no target/maven-calculator-1.0-SNAPSHOT.jar ubuntu@44.200.37.160:/home/ubuntu/'
             
-            echo "Stopping old application (if any) and starting new one..."
+            echo "Stopping old application and starting new one..."
             
-            // SSH into server and run commands
-            sh '''
-                ssh -o StrictHostKeyChecking=no ubuntu@44.200.37.160 << 'ENDSSH'
+            // Run commands directly via SSH (no heredoc)
+            sh """
+                ssh -o StrictHostKeyChecking=no ubuntu@44.200.37.160 '
                 cd /home/ubuntu
-                # Stop existing Java process if running
                 pkill -f maven-calculator || true
-                # Start new JAR in background
                 nohup java -jar maven-calculator-1.0-SNAPSHOT.jar > app.log 2>&1 &
-                ENDSSH
-            '''
+                '
+            """
         }
     }
 }
