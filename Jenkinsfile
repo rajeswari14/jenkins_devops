@@ -58,7 +58,7 @@ pipeline {
                     sh """
                     ssh -o StrictHostKeyChecking=no ubuntu@44.200.37.160 "
                         cd /home/ubuntu;
-                        pkill -f maven-calculator || true;
+                        pkill -f maven-calculator-1.0-SNAPSHOT.jar || true
                         nohup java -jar maven-calculator-1.0-SNAPSHOT.jar > app.log 2>&1 &
                     "
                     """
