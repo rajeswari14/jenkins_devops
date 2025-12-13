@@ -54,27 +54,29 @@ pipeline {
         }
 
         stage('Deploy to Application Server') {
-            steps {
-                sshagent(credentials: ["${SSH_CREDENTIALS}"]) {
-                    script {
-                        def deployExit = sh(
-                            script: """
-                                ssh -o StrictHostKeyChecking=no ${APP_SERVER} '
-                                    set +e
-                                    mkdir -p ${DEPLOY_PATH}
-                                    pkill -f "${ARTIFACT_NAME}" || true
-                                    nohup java -jar ${DEPLOY_PATH}/${ARTIFACT_NAME} > ${DEPLOY_PATH}/app.log 2>&1 &
-                                    sleep 5
-                                    exit 0
-                                '
-                            """,
-                            returnStatus: true
-                        )
-                        echo "Deployment exit code: ${deployExit}"
-                    }
-                }
+    steps {
+        sshagent(credentials: ["${SSH_CREDENTIALS}"]) {
+            script {
+                def deployExit = sh(
+                    script: """
+                    ssh -o StrictHostKeyChecking=no ${APP_SERVER} '
+                        set -e
+                        mkdir -p /home/ubuntu
+                        if pgrep -f "${ARTIFACT_NAME}" > /dev/null; then
+                            pkill -f "${ARTIFACT_NAME}"
+                        fi
+                        nohup java -jar /home/ubuntu/${ARTIFACT_NAME} > /home/ubuntu/app.log 2>&1 &
+                        echo "Deployment started"
+                    '
+                    """,
+                    returnStatus: true
+                )
+                echo "Deployment exit code: ${deployExit}"
             }
         }
+    }
+}
+
 
         stage('Post-Deployment Verification') {
             steps {
