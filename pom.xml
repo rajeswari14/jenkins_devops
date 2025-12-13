@@ -38,7 +38,7 @@
                 </configuration>
             </plugin>
 
-            <!-- Add this plugin to make the JAR executable -->
+            <!-- Only one maven-jar-plugin section, with correct mainClass -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
@@ -46,7 +46,7 @@
                 <configuration>
                     <archive>
                         <manifest>
-                            <mainClass>org.example.App</mainClass>
+                            <mainClass>com.app.calculator.MainCalculator</mainClass>
                         </manifest>
                     </archive>
                 </configuration>
