@@ -6,32 +6,30 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
-                echo "Building branch: ${env.BRANCH_NAME}"
+                echo "Branch being built: ${env.BRANCH_NAME}"
             }
         }
 
+        stage('Build') {
+            steps {
+                sh '''
+                    echo "==== Workspace ===="
+                    pwd
+                    ls -la
 
-        stage('Build (Develop only)') {
-
-               steps {
-        sh '''
-            echo "==== WORKSPACE ROOT ===="
-            pwd
-            ls -la
-
-            echo "==== FIND DIRECTORIES ===="
-            find . -maxdepth 3 -type d
-        '''
-               }
+                    echo "==== Running Maven build from root ===="
+                    mvn clean install
+                '''
+            }
+        }
     }
-}
-    
+
     post {
         success {
-            echo "Build completed successfully for develop branch"
+            echo "Build SUCCESS for branch: ${env.BRANCH_NAME}"
         }
         failure {
-            echo "Build failed for develop branch"
+            echo "Build FAILED for branch: ${env.BRANCH_NAME}"
         }
     }
 }
