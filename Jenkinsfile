@@ -13,21 +13,19 @@ pipeline {
 
         stage('Build (Develop only)') {
 
-            steps {
-                echo "Building calculator-engine module..."
-                sh '''
-                    cd calculator-engine/maven-calculator-engine
-                    mvn clean install
-                '''
+               steps {
+        sh '''
+            echo "==== WORKSPACE ROOT ===="
+            pwd
+            ls -la
 
-                echo "Building main calculator module..."
-                sh '''
-                    cd main1
-                    mvn clean install
-                '''
-            }
-        }
+            echo "==== FIND DIRECTORIES ===="
+            find . -maxdepth 3 -type d
+        '''
+               }
     }
+}
+    
     post {
         success {
             echo "Build completed successfully for develop branch"
