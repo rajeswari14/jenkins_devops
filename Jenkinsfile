@@ -1,15 +1,13 @@
 pipeline {
     agent any
-
-    environment {
-        GIT_CREDENTIALS = 'github-token'
-        SSH_CREDENTIALS = 'jenkins-private'
-        APP_SERVER = 'ubuntu@44.200.37.160'
-        ARTIFACT_NAME = 'maven-calculator-1.0-SNAPSHOT.jar'
-        DEPLOY_PATH = '/home/ubuntu'
+    options {
+        timestamps()
+        ansiColor('xterm')
+        retry(1)
     }
 
     stages {
+
         stage('Checkout SCM') {
             steps {
                 checkout scm
@@ -19,27 +17,26 @@ pipeline {
 
         stage('Build') {
             steps {
-                echo "Building the project..."
+                echo 'Building the project...'
                 sh 'mvn clean install'
             }
         }
 
         stage('Test') {
             steps {
-                echo "Running tests..."
+                echo 'Running tests...'
                 sh 'mvn test'
             }
         }
 
         stage('Security Scan') {
             steps {
+                echo 'Running Trivy security scan...'
                 script {
-                    echo "Running Trivy security scan..."
-                    def trivyExitCode = sh(
-                        script: 'trivy fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json -o trivy-report.json . || true',
-                        returnStatus: true
-                    )
-                    echo "Trivy scan finished with exit code: ${trivyExitCode}"
+                    sh '''
+                    trivy fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json -o trivy-report.json .
+                    '''
+                    echo 'Trivy scan finished'
                 }
             }
         }
@@ -48,29 +45,27 @@ pipeline {
             steps {
                 echo 'Packaging Maven project...'
                 sh 'mvn package'
-                sh "ls -la target"
-                archiveArtifacts artifacts: "target/${ARTIFACT_NAME}", allowEmptyArchive: true
+                sh 'ls -la target'
+                archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
             }
         }
 
         stage('Deploy to Application Server') {
             steps {
-                sshagent(credentials: ["${SSH_CREDENTIALS}"]) {
+                sshagent(['ubuntu']) {
                     script {
-                        def deployExit = sh(
-                            script: """
-                                ssh -o StrictHostKeyChecking=no ${APP_SERVER} '
-                                    set +e
-                                    mkdir -p ${DEPLOY_PATH}
-                                    pkill -f "${ARTIFACT_NAME}" || true
-                                    nohup java -jar ${DEPLOY_PATH}/${ARTIFACT_NAME} > ${DEPLOY_PATH}/app.log 2>&1 &
-                                    sleep 5
-                                    exit 0
-                                '
-                            """,
-                            returnStatus: true
-                        )
-                        echo "Deployment exit code: ${deployExit}"
+                        echo 'Copying artifact to server...'
+                        sh '''
+                        scp -o StrictHostKeyChecking=no target/maven-calculator-1.0-SNAPSHOT.jar ubuntu@44.200.37.160:/home/ubuntu/
+                        '''
+                        
+                        echo 'Stopping old application (if any) and starting new one...'
+                        sh '''
+                        ssh -o StrictHostKeyChecking=no ubuntu@44.200.37.160 "
+                        pkill -f 'maven-calculator-1.0-SNAPSHOT.jar' || echo 'No old app running';
+                        nohup java -jar /home/ubuntu/maven-calculator-1.0-SNAPSHOT.jar > /home/ubuntu/app.log 2>&1 &
+                        "
+                        '''
                     }
                 }
             }
@@ -80,24 +75,16 @@ pipeline {
             steps {
                 script {
                     echo 'Verifying deployment...'
-                    def retries = 5
-                    def success = false
-                    for (int i = 1; i <= retries; i++) {
-                        def status = sh(
-                            script: "curl -s -o /dev/null -w '%{http_code}' http://${APP_SERVER.replace('ubuntu@','')}:8080/health || true",
-                            returnStdout: true
-                        ).trim()
-                        if (status == "200") {
-                            echo "Application is up and running."
-                            success = true
-                            break
-                        } else {
-                            echo "Attempt ${i}: App not ready yet, status=${status}. Retrying in 5s..."
+                    retry(12) {
+                        def status = sh(script: "curl -s -o /dev/null -w %{http_code} http://44.200.37.160:8080/health || echo 000", returnStdout: true).trim()
+                        echo "App status: ${status}"
+                        if (status != '200') {
+                            echo "App not ready yet, retrying in 5s..."
                             sleep 5
+                            error "Deployment not ready"
+                        } else {
+                            echo "Application is up and running!"
                         }
-                    }
-                    if (!success) {
-                        echo "Application verification failed after ${retries} attempts, but pipeline continues."
                     }
                 }
             }
@@ -109,10 +96,10 @@ pipeline {
             echo 'Pipeline finished'
         }
         success {
-            echo 'Build SUCCESS for branch: ' + env.BRANCH_NAME
+            echo 'Build SUCCESS for branch: ${env.BRANCH_NAME}'
         }
         failure {
-            echo 'Build FAILED for branch: ' + env.BRANCH_NAME
+            echo 'Build FAILED for branch: ${env.BRANCH_NAME}'
         }
     }
 }
