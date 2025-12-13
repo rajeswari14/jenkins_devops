@@ -6,10 +6,11 @@ pipeline {
         SSH_CREDENTIALS = 'jenkins-private'
         APP_SERVER = 'ubuntu@44.200.37.160'
         ARTIFACT_NAME = 'maven-calculator-1.0-SNAPSHOT.jar'
+        DEPLOY_PATH = '/home/ubuntu'
     }
 
     stages {
-        stage('Declarative: Checkout SCM') {
+        stage('Checkout SCM') {
             steps {
                 checkout scm
                 echo "Branch: ${env.BRANCH_NAME}"
@@ -18,12 +19,14 @@ pipeline {
 
         stage('Build') {
             steps {
+                echo "Building the project..."
                 sh 'mvn clean install'
             }
         }
 
         stage('Test') {
             steps {
+                echo "Running tests..."
                 sh 'mvn test'
             }
         }
@@ -31,6 +34,7 @@ pipeline {
         stage('Security Scan') {
             steps {
                 script {
+                    echo "Running Trivy security scan..."
                     def trivyExitCode = sh(
                         script: 'trivy fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json -o trivy-report.json . || true',
                         returnStatus: true
@@ -44,33 +48,33 @@ pipeline {
             steps {
                 echo 'Packaging Maven project...'
                 sh 'mvn package'
-                sh 'ls -la target'
+                sh "ls -la target"
                 archiveArtifacts artifacts: "target/${ARTIFACT_NAME}", allowEmptyArchive: true
             }
         }
-stage('Deploy to Application Server') {
-    steps {
-        sshagent(credentials: ["${SSH_CREDENTIALS}"]) {
-            script {
-                def deployExit = sh(
-                    script: """
-                    ssh -o StrictHostKeyChecking=no ${APP_SERVER} '
-                        set +e
-                        mkdir -p /home/ubuntu
-                        pkill -f "${ARTIFACT_NAME}"
-                        nohup java -jar /home/ubuntu/${ARTIFACT_NAME} > app.log 2>&1 &
-                        sleep 5
-                        exit 0
-                    '
-                    """,
-                    returnStatus: true
-                )
-                echo "Deployment exit code: ${deployExit}"
+
+        stage('Deploy to Application Server') {
+            steps {
+                sshagent(credentials: ["${SSH_CREDENTIALS}"]) {
+                    script {
+                        def deployExit = sh(
+                            script: """
+                                ssh -o StrictHostKeyChecking=no ${APP_SERVER} '
+                                    set +e
+                                    mkdir -p ${DEPLOY_PATH}
+                                    pkill -f "${ARTIFACT_NAME}" || true
+                                    nohup java -jar ${DEPLOY_PATH}/${ARTIFACT_NAME} > ${DEPLOY_PATH}/app.log 2>&1 &
+                                    sleep 5
+                                    exit 0
+                                '
+                            """,
+                            returnStatus: true
+                        )
+                        echo "Deployment exit code: ${deployExit}"
+                    }
+                }
             }
         }
-    }
-}
-
 
         stage('Post-Deployment Verification') {
             steps {
@@ -110,14 +114,5 @@ stage('Deploy to Application Server') {
         failure {
             echo 'Build FAILED for branch: ' + env.BRANCH_NAME
         }
-        cleanup {
-            script {
-                try {
-                    // Optional GitHub status update logic
-                } catch (Exception e) {
-                    echo "Skipping GitHub commit status update due to token/permission issue: ${e}"
-                }
-            }
-        }
     }
-} // <- Final closing brace for pipeline
+}
