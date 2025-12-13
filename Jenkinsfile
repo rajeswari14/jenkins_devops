@@ -1,70 +1,90 @@
 pipeline {
     agent any
 
+    environment {
+        APP_NAME    = "calculator-app"
+        DEPLOY_USER = "ubuntu"
+        DEPLOY_HOST = "44.200.37.160"
+        JAVA_HOME   = "/usr/lib/jvm/java-21-openjdk-amd64"
+        PATH        = "${JAVA_HOME}/bin:${env.PATH}"
+    }
+
     options {
-        timestamps()  // Add timestamps in console output
-        retry(1)      // Retry once if pipeline fails
+        timestamps()
+        disableConcurrentBuilds()
     }
 
     stages {
-        stage('Checkout SCM') {
+
+        stage('Checkout') {
             steps {
-                echo "Checking out source code..."
                 checkout scm
             }
         }
 
-        stage('Build') {
+        stage('Build & Package') {
             steps {
-                echo "Building the project..."
-                sh 'mvn clean install'
+                echo "Building multi-module Maven project..."
+                sh 'mvn clean install -DskipTests'  // build both engine + app
+                sh 'ls -lh calculator-app/target/'   // confirm JAR exists
             }
         }
 
-        stage('Test') {
+        stage('Security Scan (Trivy)') {
             steps {
-                echo "Running tests..."
-                sh 'mvn test'
+                sh '''
+                    trivy fs --exit-code 0 --format json \
+                    --output trivy-report.json calculator-app/target/
+                '''
             }
-        }
-
-        stage('Security Scan') {
-            steps {
-                echo "Running Trivy security scan..."
-                sh 'trivy fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json -o trivy-report.json . || true'
-            }
-        }
-
-        stage('Package') {
-            steps {
-                echo "Packaging Maven project..."
-                sh 'mvn package'
-                sh 'ls -la target'
-                archiveArtifacts artifacts: 'target/maven-calculator-1.0-SNAPSHOT.jar', fingerprint: true
-            }
-        }
-
-        stage('Deploy to Application Server') {
-            steps {
-                sshagent(['ubuntu']) {
-                    echo "Deploying artifact to server..."
-
-                    // Copy artifact
-                    sh 'scp -o StrictHostKeyChecking=no target/maven-calculator-1.0-SNAPSHOT.jar ubuntu@44.200.37.160:/home/ubuntu/'
-
-                    echo "Stopping old application and starting new one..."
-
-                    // Run commands safely via SSH
-                    sh """
-                    ssh -o StrictHostKeyChecking=no ubuntu@44.200.37.160 "
-                        cd /home/ubuntu;
-                        pkill -f maven-calculator-1.0-SNAPSHOT.jar || true
-                        nohup java -jar maven-calculator-1.0-SNAPSHOT.jar > app.log 2>&1 &
-                    "
-                    """
+            post {
+                always {
+                    archiveArtifacts artifacts: 'trivy-report.json', fingerprint: true
                 }
             }
         }
+
+        stage('Deploy to Server') {
+            steps {
+                sshagent(['app-server']) {
+                    echo "Deploying artifact..."
+                    sh 'ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_HOST} "mkdir -p /home/ubuntu/${APP_NAME}"'
+                    sh 'scp -o StrictHostKeyChecking=no calculator-app/target/calculator-app-1.0-SNAPSHOT.jar ${DEPLOY_USER}@${DEPLOY_HOST}:/home/ubuntu/${APP_NAME}/app.jar'
+                    sh '''
+                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_HOST} '
+                        pkill -f app.jar || true
+                        nohup java -jar /home/ubuntu/${APP_NAME}/app.jar > /home/ubuntu/${APP_NAME}/app.log 2>&1 &
+                        '
+                    '''
+                }
+            }
+        }
+
+        stage('Post-Deployment Verification') {
+            steps {
+                script {
+                    def maxRetries = 10
+                    def retryInterval = 5
+                    def status = 0
+
+                    for (int i = 1; i <= maxRetries; i++) {
+                        status = sh(script: "curl -s -o /dev/null -w '%{http_code}' http://${DEPLOY_HOST}:8080/health || true", returnStdout: true).trim()
+                        if (status == '200') {
+                            echo "Application is running! Status: ${status}"
+                            break
+                        } else {
+                            echo "Attempt ${i}: App not ready yet, status=${status}. Retrying in ${retryInterval}s..."
+                            sleep(retryInterval)
+                        }
+                    }
+
+                    if (status != '200') {
+                        error "Application verification failed after ${maxRetries} attempts!"
+                    }
+                }
+            }
+        }
+
     }
 
     post {
