@@ -2,8 +2,8 @@ pipeline {
     agent any
 
     options {
-        timestamps()  // Adds timestamps to console logs
-        retry(1)      // Retries the pipeline once if it fails
+        timestamps()  // Add timestamps in console output
+        retry(1)      // Retry once if pipeline fails
     }
 
     stages {
@@ -17,37 +17,29 @@ pipeline {
         stage('Build') {
             steps {
                 echo "Building the project..."
-                ansiColor('xterm') {
-                    sh 'mvn clean install'
-                }
+                sh 'mvn clean install'
             }
         }
 
         stage('Test') {
             steps {
                 echo "Running tests..."
-                ansiColor('xterm') {
-                    sh 'mvn test'
-                }
+                sh 'mvn test'
             }
         }
 
         stage('Security Scan') {
             steps {
                 echo "Running Trivy security scan..."
-                ansiColor('xterm') {
-                    sh 'trivy fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json -o trivy-report.json . || true'
-                }
+                sh 'trivy fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json -o trivy-report.json . || true'
             }
         }
 
         stage('Package') {
             steps {
                 echo "Packaging Maven project..."
-                ansiColor('xterm') {
-                    sh 'mvn package'
-                    sh 'ls -la target'
-                }
+                sh 'mvn package'
+                sh 'ls -la target'
                 archiveArtifacts artifacts: 'target/maven-calculator-1.0-SNAPSHOT.jar', fingerprint: true
             }
         }
@@ -58,7 +50,7 @@ pipeline {
                     echo "Copying artifact to server..."
                     sh 'scp -o StrictHostKeyChecking=no target/maven-calculator-1.0-SNAPSHOT.jar ubuntu@44.200.37.160:/home/ubuntu/'
 
-                    echo "Stopping old application (if any) and starting new one..."
+                    echo "Stopping old application and starting new one..."
                     sh """
                         ssh -o StrictHostKeyChecking=no ubuntu@44.200.37.160 << 'EOF'
                         pkill -f maven-calculator-1.0-SNAPSHOT.jar || true
