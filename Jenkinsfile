@@ -18,6 +18,7 @@ pipeline {
 
         stage('Build') {
             steps {
+                // Run Maven at the root of the project
                 sh 'mvn clean install'
             }
         }
@@ -31,6 +32,7 @@ pipeline {
         stage('Security Scan') {
             steps {
                 script {
+                    // Run Trivy scan from root
                     def trivyExitCode = sh(
                         script: 'trivy fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json -o trivy-report.json . || true',
                         returnStatus: true
@@ -78,10 +80,9 @@ pipeline {
             echo 'Build FAILED for branch: ' + env.BRANCH_NAME
         }
         cleanup {
-            // This block ensures the GitHub commit status issue doesn’t break the build
             script {
                 try {
-                    // any GitHub status update code can go here
+                    // Optional GitHub status update logic
                 } catch (Exception e) {
                     echo "Skipping GitHub commit status update due to token/permission issue: ${e}"
                 }
