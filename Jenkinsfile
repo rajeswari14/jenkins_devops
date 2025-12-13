@@ -49,24 +49,29 @@ pipeline {
             }
         }
 
-        stage('Deploy to Application Server') {
-            steps {
-                sshagent(credentials: ["${SSH_CREDENTIALS}"]) {
-                    script {
-                        sh """
-                        ssh -o StrictHostKeyChecking=no ${APP_SERVER} '
-                            set +e
-                            mkdir -p /home/ubuntu
-                            pkill -f "${ARTIFACT_NAME}"
-                            nohup java -jar /home/ubuntu/${ARTIFACT_NAME} > app.log 2>&1 &
-                            sleep 5
-                            exit 0
-                        '
-                        """
-                    }
-                }
+       stage('Deploy to Application Server') {
+    steps {
+        sshagent(credentials: ["${SSH_CREDENTIALS}"]) {
+            script {
+                def deployExit = sh(
+                    script: """
+                    ssh -o StrictHostKeyChecking=no ${APP_SERVER} '
+                        set +e
+                        mkdir -p /home/ubuntu
+                        pkill -f "${ARTIFACT_NAME}"
+                        nohup java -jar /home/ubuntu/${ARTIFACT_NAME} > app.log 2>&1 &
+                        sleep 5
+                        exit 0
+                    '
+                    """,
+                    returnStatus: true
+                )
+                echo "Deployment exit code: ${deployExit}"
             }
         }
+    }
+}
+
 
         stage('Post-Deployment Verification') {
             steps {
